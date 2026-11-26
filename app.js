@@ -1,5 +1,5 @@
 import { encodePlaceSignal, encodeWav, isSupportedSampleRate, PlaceSignalDecoder } from "./audio-modem.js";
-import { createPlaceGate, getMapUrl, getPlace, PLACES, selectPlace } from "./places.js";
+import { createPlaceGate, getMapEmbedUrl, getMapUrl, getPlace, PLACES, selectPlace } from "./places.js";
 
 const byId = (id) => document.getElementById(id);
 const receiverTab = byId("receiver-tab");
@@ -8,7 +8,12 @@ const receiverPanel = byId("receiver-panel");
 const studioPanel = byId("studio-panel");
 const listenButton = byId("listen-button");
 const listenFeedback = byId("listen-feedback");
+const listenSpeech = byId("listen-speech");
+const listenUltrasound = byId("listen-ultrasound");
+const listenModeNote = byId("listen-mode-note");
 const placeCard = byId("place-card");
+const placeDialog = byId("place-dialog");
+const guide = byId("guide");
 const speechButton = byId("speech-button");
 const studioFeedback = byId("studio-feedback");
 const cueFeedback = byId("cue-feedback");
@@ -25,6 +30,8 @@ let listening = null;
 let speech = null;
 let output = null;
 let activeCue = null;
+let displayedPlace = null;
+let queuedPlaceDialog = false;
 
 function feedback(element, message, isError = false) {
   element.textContent = message;
@@ -38,35 +45,59 @@ function status(id, state, message) {
   element.lastElementChild.textContent = message;
 }
 
-function showPlace(place, isDemo = false) {
+function openPlaceDialog() {
+  if (!displayedPlace || receiverPanel.hidden) return;
+  if (guide.open) {
+    queuedPlaceDialog = true;
+    return;
+  }
+
+  queuedPlaceDialog = false;
+  const frame = byId("place-dialog-embed");
+  const mapUrl = getMapEmbedUrl(displayedPlace);
+  frame.hidden = !mapUrl;
+  if (mapUrl && frame.getAttribute("src") !== mapUrl) frame.src = mapUrl;
+  if (!placeDialog.open) placeDialog.showModal();
+}
+
+function showPlace(place, source) {
+  const sources = { demo: "데모 수신", ultrasound: "초음파 신호", radio: "방송 음성" };
+  const label = sources[source];
+  const detail = place.region + (source === "demo" ? "" : " · " + receivedTime.format(new Date()));
+  const mapUrl = getMapUrl(place);
+  displayedPlace = place;
+
   byId("received-name").textContent = place.name;
-  byId("received-detail").textContent = place.region + (isDemo ? "" : " · " + receivedTime.format(new Date()));
+  byId("received-detail").textContent = detail;
   const tag = byId("result-tag");
-  tag.textContent = isDemo ? "데모 수신" : "수신 완료";
+  tag.textContent = label;
   tag.hidden = false;
 
   const link = byId("map-link");
-  link.href = getMapUrl(place);
+  link.href = mapUrl;
   link.hidden = false;
   placeCard.dataset.hasPlace = "true";
 
-  const result = byId("received-name").getBoundingClientRect();
-  if (!isDemo && (result.top < 0 || result.bottom > window.innerHeight)) {
-    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    placeCard.scrollIntoView({ block: "nearest", behavior: reducedMotion ? "auto" : "smooth" });
-  }
+  byId("show-place-dialog").hidden = false;
+  byId("place-dialog-name").textContent = place.name;
+  byId("place-dialog-detail").textContent = detail;
+  byId("place-dialog-source").textContent = label;
+  byId("place-dialog-map").href = mapUrl;
+  byId("place-dialog-embed").title = place.name + " 지도";
+  openPlaceDialog();
 }
 
-function receivePlace(id) {
+function receivePlace(id, source) {
   const place = getPlace(id);
-  if (place && receiveGate.accept(place.id)) showPlace(place);
+  if (place && receiveGate.accept(place.id, performance.now())) showPlace(place, source);
 }
 
 function setListeningStatus(state) {
+  const input = listenSpeech.checked ? "방송 음성" : "초음파";
   const text = {
     idle: ["수신 대기", "수신 시작"],
     pending: ["마이크 연결 중", "수신 취소"],
-    active: ["수신 중", "수신 중지"],
+    active: [input + " 수신 중", "수신 중지"],
     error: ["수신 중단", "다시 시도"],
   };
   const [label, buttonLabel] = text[state];
@@ -78,6 +109,8 @@ function setListeningStatus(state) {
 function stopListening(state = "idle", message = "") {
   const session = listening;
   listening = null;
+  queuedPlaceDialog = false;
+  session?.speech?.stop();
   if (session?.worklet) {
     session.worklet.port.onmessage = null;
     session.worklet.port.close();
@@ -85,7 +118,7 @@ function stopListening(state = "idle", message = "") {
   }
   session?.source?.disconnect();
   session?.stream?.getTracks().forEach((track) => track.stop());
-  if (session && session.context.state !== "closed") {
+  if (session?.context && session.context.state !== "closed") {
     session.context.close().catch(() => {});
   }
   setListeningStatus(state);
@@ -105,11 +138,7 @@ function microphoneError(error) {
   }
 }
 
-async function startListening() {
-  if (!window.isSecureContext) {
-    stopListening("error", "마이크 수신은 HTTPS 또는 이 컴퓨터의 로컬 주소에서 가능합니다.");
-    return;
-  }
+async function startUltrasound() {
   if (!AudioEngine || !navigator.mediaDevices?.getUserMedia || !window.AudioWorkletNode) {
     stopListening("error", "이 브라우저에서는 마이크 수신을 지원하지 않습니다.");
     return;
@@ -148,7 +177,7 @@ async function startListening() {
     const worklet = new AudioWorkletNode(context, "place-input");
     session.worklet = worklet;
     worklet.port.onmessage = ({ data }) => {
-      if (listening === session) receivePlace(data);
+      if (listening === session) receivePlace(data, "ultrasound");
     };
     worklet.addEventListener("processorerror", () => {
       if (listening === session) stopListening("error", "소리 신호 처리가 중단됐습니다. 다시 시작하세요.");
@@ -160,17 +189,56 @@ async function startListening() {
   }
 }
 
+function startRadio() {
+  if (!Recognition) {
+    stopListening("error", "이 브라우저에서는 방송 음성 인식을 사용할 수 없습니다. 음성 인식을 지원하는 브라우저에서 열거나 초음파 신호를 선택하세요.");
+    return;
+  }
+
+  const session = {};
+  try {
+    session.speech = createSpeechCapture({
+      onStart: () => setListeningStatus("active"),
+      onTranscript: (text) => {
+        const place = selectPlace(text);
+        if (place) receivePlace(place.id, "radio");
+      },
+      onError: (code) => stopListening("error", speechError(code)),
+    });
+    listening = session;
+    setListeningStatus("pending");
+    feedback(listenFeedback, "");
+    session.speech.start();
+  } catch {
+    stopListening("error", "방송 음성 인식을 시작할 수 없습니다. 마이크 권한을 확인하고 다시 시도하세요.");
+  }
+}
+
+function updateListenMode() {
+  listenModeNote.textContent = listenSpeech.checked
+    ? "브라우저 음성 인식 서비스에 마이크 소리가 전송될 수 있습니다."
+    : "초음파 신호는 이 기기의 마이크로 받아 브라우저에서 처리합니다.";
+  stopListening();
+}
+
+listenSpeech.addEventListener("change", updateListenMode);
+listenUltrasound.addEventListener("change", updateListenMode);
+
 listenButton.addEventListener("click", () => {
   if (listening) stopListening();
-  else void startListening();
+  else if (!window.isSecureContext) stopListening("error", "마이크 수신은 HTTPS 또는 이 컴퓨터의 로컬 주소에서 가능합니다.");
+  else if (listenSpeech.checked) startRadio();
+  else void startUltrasound();
 });
+
+byId("show-place-dialog").addEventListener("click", openPlaceDialog);
 
 byId("demo-button").addEventListener("click", () => {
   const place = selectPlace("오늘은 덕진공원에 가볼까요?");
   if (!place) return;
   const decoded = new PlaceSignalDecoder(WAV_SAMPLE_RATE, (id) => {
     const result = getPlace(id);
-    if (result) showPlace(result, true);
+    if (result) showPlace(result, "demo");
   });
   const audio = encodePlaceSignal(place.id, { repeats: 1 });
   for (let offset = 0; offset < audio.length; offset += 128) {
@@ -248,39 +316,83 @@ function setSpeechStatus(state) {
   byId("speech-button-text").textContent = buttonLabel;
 }
 
+function speechError(code) {
+  const messages = {
+    "not-allowed": "브라우저의 사이트 설정에서 마이크를 허용한 뒤 다시 시도하세요.",
+    "service-not-allowed": "이 브라우저에서 음성 인식 서비스를 사용할 수 없습니다.",
+    "audio-capture": "음성 인식에 쓸 마이크를 찾지 못했습니다.",
+    "network": "음성 인식 서비스에 연결하지 못했습니다. 인터넷 연결을 확인한 뒤 다시 시도하세요.",
+    "language-not-supported": "이 브라우저에서 한국어 음성 인식을 사용할 수 없습니다.",
+  };
+  return messages[code] ?? "음성 인식이 중단됐습니다. 다시 시작하세요.";
+}
+
+function createSpeechCapture({ onStart, onTranscript, onError }) {
+  const recognition = new Recognition();
+  recognition.lang = "ko-KR";
+  recognition.continuous = true;
+  recognition.interimResults = true;
+
+  let text = "";
+  let stopped = false;
+  let flushTimer;
+  let restartTimer;
+  function flush() {
+    clearTimeout(flushTimer);
+    if (stopped || !text) return;
+    const transcript = text;
+    text = "";
+    onTranscript(transcript);
+  }
+
+  recognition.onstart = () => {
+    if (!stopped) onStart();
+  };
+  recognition.onspeechstart = () => clearTimeout(flushTimer);
+  recognition.onresult = (event) => {
+    if (stopped) return;
+    for (let index = event.resultIndex; index < event.results.length; index += 1) {
+      const result = event.results[index];
+      if (result.isFinal) text = (text + " " + result[0].transcript).trim().slice(-600);
+    }
+    clearTimeout(flushTimer);
+    if (text) flushTimer = setTimeout(flush, SPEECH_PAUSE_MS);
+  };
+  recognition.onerror = ({ error }) => {
+    if (!stopped && error !== "no-speech") onError(error);
+  };
+  recognition.onend = () => {
+    if (stopped) return;
+    flush();
+    restartTimer = setTimeout(() => {
+      if (stopped) return;
+      try {
+        recognition.start();
+      } catch {
+        onError("restart");
+      }
+    }, 350);
+  };
+
+  return {
+    start() {
+      recognition.start();
+    },
+    stop() {
+      stopped = true;
+      clearTimeout(flushTimer);
+      clearTimeout(restartTimer);
+      recognition.abort();
+    },
+  };
+}
+
 function stopSpeech(state = "idle", message = "") {
   const session = speech;
   speech = null;
-  if (session) {
-    clearTimeout(session.flushTimer);
-    clearTimeout(session.restartTimer);
-    session.recognition.abort();
-  }
+  session?.stop();
   setSpeechStatus(state);
   feedback(studioFeedback, message, state === "error");
-}
-
-function flushSpeech(session) {
-  clearTimeout(session.flushTimer);
-  if (speech !== session || !session.text) return;
-
-  const display = byId("last-transcript");
-  display.textContent = "마지막 인식 문장 · " + session.text;
-  display.hidden = false;
-  const text = session.text;
-  session.text = "";
-  sendTranscript(text, session);
-}
-
-function speechError(code) {
-  const messages = {
-    "not-allowed": "브라우저의 마이크 권한을 확인하세요. 아래에서 대사를 입력할 수도 있습니다.",
-    "service-not-allowed": "이 브라우저에서 음성 인식 서비스를 사용할 수 없습니다. 아래에서 대사를 입력해 주세요.",
-    "audio-capture": "음성 인식에 쓸 마이크를 찾지 못했습니다.",
-    "network": "음성 인식 서비스에 연결하지 못했습니다. 아래에서 대사를 입력할 수도 있습니다.",
-    "language-not-supported": "이 브라우저에서 한국어 음성 인식을 사용할 수 없습니다.",
-  };
-  return messages[code] ?? "음성 인식을 계속할 수 없습니다. 아래에서 대사를 입력할 수도 있습니다.";
 }
 
 function startSpeech() {
@@ -289,47 +401,24 @@ function startSpeech() {
     return;
   }
   try {
+    const session = createSpeechCapture({
+      onStart: () => setSpeechStatus("active"),
+      onTranscript: (text) => {
+        const display = byId("last-transcript");
+        display.textContent = "마지막 인식 문장 · " + text;
+        display.hidden = false;
+        sendTranscript(text, session);
+      },
+      onError: (code) => stopSpeech("error", speechError(code) + " 아래에서 대사를 입력할 수도 있습니다."),
+    });
     const playback = startOutput();
-    const recognition = new Recognition();
-    const session = { recognition, text: "" };
     speech = session;
     playback.catch(() => {
       if (speech === session) stopSpeech("error", "소리 신호 출력을 시작할 수 없습니다.");
     });
-    recognition.lang = "ko-KR";
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.onstart = () => {
-      if (speech === session) setSpeechStatus("active");
-    };
-    recognition.onspeechstart = () => clearTimeout(session.flushTimer);
-    recognition.onresult = (event) => {
-      if (speech !== session) return;
-      for (let index = event.resultIndex; index < event.results.length; index += 1) {
-        const result = event.results[index];
-        if (result.isFinal) session.text = (session.text + " " + result[0].transcript).trim().slice(-600);
-      }
-      clearTimeout(session.flushTimer);
-      if (session.text) session.flushTimer = setTimeout(() => flushSpeech(session), SPEECH_PAUSE_MS);
-    };
-    recognition.onerror = ({ error }) => {
-      if (speech === session && error !== "no-speech") stopSpeech("error", speechError(error));
-    };
-    recognition.onend = () => {
-      if (speech !== session) return;
-      flushSpeech(session);
-      session.restartTimer = setTimeout(() => {
-        if (speech !== session) return;
-        try {
-          recognition.start();
-        } catch {
-          stopSpeech("error", "음성 인식을 다시 시작해 주세요.");
-        }
-      }, 350);
-    };
     setSpeechStatus("pending");
     feedback(studioFeedback, "");
-    recognition.start();
+    session.start();
   } catch (error) {
     stopSpeech("error", error.message || "음성 인식을 시작할 수 없습니다.");
   }
@@ -363,8 +452,10 @@ byId("download-cue").addEventListener("click", () => {
 });
 
 function setMode(studio, updateUrl) {
-  if (studio) stopListening();
-  else {
+  if (studio) {
+    stopListening();
+    if (placeDialog.open) placeDialog.close();
+  } else {
     stopSpeech();
     stopCue();
   }
@@ -395,11 +486,15 @@ for (const tab of [receiverTab, studioTab]) {
   });
 }
 
-byId("open-guide").addEventListener("click", () => byId("guide").showModal());
+byId("open-guide").addEventListener("click", () => guide.showModal());
+guide.addEventListener("close", () => {
+  if (queuedPlaceDialog) openPlaceDialog();
+});
 window.addEventListener("pagehide", () => {
   stopListening();
   stopSpeech();
   stopCue();
+  if (placeDialog.open) placeDialog.close();
   if (output?.state === "running") output.suspend().catch(() => {});
 });
 setMode(new URLSearchParams(window.location.search).get("mode") === "studio", false);

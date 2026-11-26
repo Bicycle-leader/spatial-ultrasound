@@ -50,12 +50,23 @@
             </div>
             <div class="listen-body">
               <h2 id="listen-heading">방송 소리 듣기</h2>
-              <p>방송이 나오는 스피커 근처에서 수신을 시작하세요.</p>
+              <p>라디오나 방송 스피커 근처에서 수신을 시작하세요.</p>
+              <fieldset class="listen-options">
+                <legend class="visually-hidden">수신 방식</legend>
+                <label class="listen-option">
+                  <input id="listen-speech" type="radio" name="listen-mode" value="speech" aria-describedby="listen-mode-note" checked>
+                  <span>방송 음성</span>
+                </label>
+                <label class="listen-option">
+                  <input id="listen-ultrasound" type="radio" name="listen-mode" value="ultrasound" aria-describedby="listen-mode-note">
+                  <span>초음파 신호</span>
+                </label>
+              </fieldset>
+              <p class="micro-note" id="listen-mode-note">브라우저 음성 인식 서비스에 마이크 소리가 전송될 수 있습니다.</p>
               <button class="button primary listen-button" id="listen-button" type="button">
                 <span class="icon icon-mic" aria-hidden="true"></span><span id="listen-button-text">수신 시작</span>
               </button>
               <p class="feedback" id="listen-feedback" role="status" hidden></p>
-              <p class="micro-note"><span class="icon icon-lock" aria-hidden="true"></span> 수신 오디오는 이 기기에서 처리합니다.</p>
             </div>
           </section>
 
@@ -70,10 +81,13 @@
             </div>
             <div class="result-body" aria-live="polite" aria-atomic="true">
               <h3 id="received-name">아직 받은 장소가 없어요</h3>
-              <p id="received-detail">소리 신호를 받으면 이곳에 표시됩니다.</p>
-              <a class="button secondary map-button" id="map-link" target="_blank" rel="noopener noreferrer" hidden>
-                <span class="icon icon-pin" aria-hidden="true"></span> 카카오맵에서 보기
-              </a>
+              <p id="received-detail">장소가 감지되면 지도 창이 열립니다.</p>
+              <div class="result-actions">
+                <button class="button secondary map-button" id="show-place-dialog" type="button" hidden>
+                  <span class="icon icon-pin" aria-hidden="true"></span> 지도 창 다시 보기
+                </button>
+                <a class="button secondary map-button" id="map-link" target="_blank" rel="noopener noreferrer" hidden>카카오맵에서 보기</a>
+              </div>
             </div>
             <div class="demo-row">
               <span>마이크 없이 확인하기</span>
@@ -141,6 +155,24 @@
       <footer class="site-footer"><span>소리지도</span><span>방송 연동 테스트</span></footer>
     </main>
 
+    <dialog class="place-dialog" id="place-dialog" aria-labelledby="place-dialog-name" aria-describedby="place-dialog-detail">
+      <div class="place-dialog-header">
+        <span class="place-dialog-marker" aria-hidden="true"><i class="icon icon-pin"></i></span>
+        <div class="place-dialog-heading">
+          <p id="place-dialog-source" class="place-dialog-source" aria-live="polite"></p>
+          <h2 id="place-dialog-name">받은 장소</h2>
+          <p id="place-dialog-detail"></p>
+        </div>
+        <form method="dialog"><button class="close-button" type="submit" aria-label="지도 창 닫기" autofocus>×</button></form>
+      </div>
+      <div class="place-dialog-body">
+        <iframe id="place-dialog-embed" title="장소 지도" referrerpolicy="no-referrer" hidden></iframe>
+        <a class="button primary" id="place-dialog-map" target="_blank" rel="noopener noreferrer">
+          <span class="icon icon-pin" aria-hidden="true"></span> 카카오맵에서 보기
+        </a>
+      </div>
+    </dialog>
+
     <dialog id="guide" aria-labelledby="guide-heading">
       <div class="guide-header">
         <h2 id="guide-heading">사용 안내</h2>
@@ -150,9 +182,11 @@
         <h3>방송 보내기</h3>
         <p>방송 스튜디오에서 음성 인식을 시작한 뒤 “오늘은 덕진공원에 가볼까요?”라고 말하세요. 장소를 직접 선택해서 보내거나 WAV를 저장할 수도 있습니다.</p>
         <h3>휴대폰에서 받기</h3>
-        <p>HTTPS로 페이지를 열고 수신을 시작해 마이크 권한을 허용하세요. 페이지를 화면에 띄운 상태에서 방송 소리를 들려주면 받은 장소가 자동으로 바뀝니다.</p>
-        <h3>송출 환경</h3>
-        <p>고주파가 보존되는 송출 및 재생 장치가 필요합니다. 일부 청취자는 신호를 들을 수 있으므로 낮은 볼륨에서 테스트하세요.</p>
+        <p>HTTPS로 페이지를 열고 수신을 시작해 마이크 권한을 허용하세요. 화면을 열어 두면 등록 장소가 감지될 때 지도 창이 자동으로 열립니다.</p>
+        <h3>일반 라디오 듣기</h3>
+        <p>방송 음성을 선택하면 라디오에서 들리는 한국어 대사로 장소를 찾습니다. 브라우저 음성 인식 서비스에 마이크 소리가 전송될 수 있습니다.</p>
+        <h3>초음파 신호 듣기</h3>
+        <p>방송이 장소 정보를 초음파로 보낼 때 초음파 신호를 선택하세요. 고주파가 보존되는 송출 및 재생 장치가 필요합니다.</p>
       </div>
     </dialog>
   </body>

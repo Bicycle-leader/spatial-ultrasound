@@ -1,13 +1,13 @@
 export const PLACES = Object.freeze([
-  { id: 1, name: "덕진공원", region: "전북 전주시 덕진구", aliases: ["전주덕진공원"] },
-  { id: 2, name: "전주한옥마을", region: "전북 전주시 완산구", aliases: [] },
-  { id: 3, name: "경기전", region: "전북 전주시 완산구", aliases: ["전주경기전"] },
-  { id: 4, name: "전동성당", region: "전북 전주시 완산구", aliases: ["전주전동성당"] },
-  { id: 5, name: "오목대", region: "전북 전주시 완산구", aliases: ["전주오목대"] },
-  { id: 6, name: "전주동물원", region: "전북 전주시 덕진구", aliases: [] },
-  { id: 7, name: "국립전주박물관", region: "전북 전주시 완산구", aliases: ["전주국립박물관"] },
-  { id: 8, name: "전주향교", region: "전북 전주시 완산구", aliases: [] },
-  { id: 9, name: "풍남문", region: "전북 전주시 완산구", aliases: ["전주풍남문"] },
+  { id: 1, name: "덕진공원", region: "전북 전주시 덕진구", lat: 35.84738, lon: 127.12166, aliases: ["전주덕진공원"] },
+  { id: 2, name: "전주한옥마을", region: "전북 전주시 완산구", lat: 35.81472, lon: 127.15264, aliases: [] },
+  { id: 3, name: "경기전", region: "전북 전주시 완산구", lat: 35.81530, lon: 127.14973, aliases: ["전주경기전"] },
+  { id: 4, name: "전동성당", region: "전북 전주시 완산구", lat: 35.81339, lon: 127.14945, aliases: ["전주전동성당"] },
+  { id: 5, name: "오목대", region: "전북 전주시 완산구", lat: 35.81438, lon: 127.15459, aliases: ["전주오목대"] },
+  { id: 6, name: "전주동물원", region: "전북 전주시 덕진구", lat: 35.85609, lon: 127.14470, aliases: [] },
+  { id: 7, name: "국립전주박물관", region: "전북 전주시 완산구", lat: 35.80104, lon: 127.08837, aliases: ["전주국립박물관"] },
+  { id: 8, name: "전주향교", region: "전북 전주시 완산구", lat: 35.81273, lon: 127.15692, aliases: [] },
+  { id: 9, name: "풍남문", region: "전북 전주시 완산구", lat: 35.81352, lon: 127.14755, aliases: ["전주풍남문"] },
 ].map((place) => Object.freeze({ ...place, aliases: Object.freeze(place.aliases) })));
 
 const placesById = new Map(PLACES.map((place) => [place.id, place]));
@@ -45,6 +45,22 @@ export function getMapUrl(place) {
 
   const query = knownPlace.name.includes("전주") ? knownPlace.name : `전주 ${knownPlace.name}`;
   return `https://map.kakao.com/link/search/${encodeURIComponent(query)}`;
+}
+
+export function getMapEmbedUrl(place) {
+  const knownPlace = getPlace(place?.id);
+  if (!knownPlace) return null;
+
+  const { lat, lon } = knownPlace;
+  // These offsets span approximately 800 meters in Jeonju.
+  const latitudeOffset = 0.0036;
+  const longitudeOffset = 0.0045;
+  const bounds = [lon - longitudeOffset, lat - latitudeOffset, lon + longitudeOffset, lat + latitudeOffset];
+  const url = new URL("https://www.openstreetmap.org/export/embed.html");
+  url.searchParams.set("bbox", bounds.map((coordinate) => coordinate.toFixed(5)).join(","));
+  url.searchParams.set("layer", "mapnik");
+  url.searchParams.set("marker", `${lat},${lon}`);
+  return url.href;
 }
 
 export function selectPlace(transcript) {
