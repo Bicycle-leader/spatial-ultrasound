@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#0b0b14">
+    <meta name="description" content="방송에서 언급한 장소를 소리 신호로 받아 지도에서 확인하세요.">
+    <title>소리지도 — 방송과 장소를 잇다</title>
+    <link rel="stylesheet" href="./styles.css">
+    <script type="module" src="./app.js"></script>
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="shell header-inner">
+        <a class="brand" href="?" aria-label="소리지도 수신 화면">
+          <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+          <span>소리지도</span>
+        </a>
+        <button class="help-button" id="open-guide" type="button"><span aria-hidden="true">?</span> 사용 안내</button>
+      </div>
+    </header>
+
+    <main class="shell">
+      <section class="intro" aria-labelledby="page-title">
+        <h1 id="page-title">방송과 장소를 <span>잇는 소리.</span></h1>
+        <p>방송에서 들은 장소를 휴대폰 지도에서 만나보세요.</p>
+      </section>
+
+      <div class="tabs" role="tablist" aria-label="사용 모드">
+        <button id="receiver-tab" type="button" role="tab" aria-selected="true" aria-controls="receiver-panel">
+          <span class="icon icon-headphones" aria-hidden="true"></span> 청취자 수신
+        </button>
+        <button id="studio-tab" type="button" role="tab" aria-selected="false" aria-controls="studio-panel" tabindex="-1">
+          <span class="icon icon-sliders" aria-hidden="true"></span> 방송 스튜디오
+        </button>
+      </div>
+
+      <section id="receiver-panel" role="tabpanel" aria-labelledby="receiver-tab">
+        <div class="panel-grid">
+          <section class="surface receiver-surface" aria-labelledby="listen-heading">
+            <div class="surface-bar">
+              <span class="section-label">소리 신호 수신</span>
+              <span id="receiver-status" class="status" role="status"><i></i><span>수신 대기</span></span>
+            </div>
+            <div class="radar" aria-hidden="true">
+              <div class="radar-grid"></div>
+              <i class="radar-ring ring-1"></i><i class="radar-ring ring-2"></i><i class="radar-ring ring-3"></i><i class="radar-ring ring-4"></i>
+              <i class="radar-point point-1"></i><i class="radar-point point-2"></i><i class="radar-point point-3"></i>
+              <div class="radar-center"><span class="icon icon-mic"></span></div>
+            </div>
+            <div class="listen-body">
+              <h2 id="listen-heading">방송 소리 듣기</h2>
+              <p>방송이 나오는 스피커 근처에서 수신을 시작하세요.</p>
+              <button class="button primary listen-button" id="listen-button" type="button">
+                <span class="icon icon-mic" aria-hidden="true"></span><span id="listen-button-text">수신 시작</span>
+              </button>
+              <p class="feedback" id="listen-feedback" role="status" hidden></p>
+              <p class="micro-note"><span class="icon icon-lock" aria-hidden="true"></span> 수신 오디오는 이 기기에서 처리합니다.</p>
+            </div>
+          </section>
+
+          <section class="surface result-surface" id="place-card" aria-labelledby="received-heading">
+            <div class="surface-bar">
+              <h2 class="section-label" id="received-heading">받은 장소</h2>
+              <span class="result-tag" id="result-tag" hidden></span>
+            </div>
+            <div class="map-illustration" aria-hidden="true">
+              <canvas id="map-art" width="720" height="318"></canvas>
+              <span class="map-marker"><i class="icon icon-pin"></i></span>
+            </div>
+            <div class="result-body" aria-live="polite" aria-atomic="true">
+              <h3 id="received-name">아직 받은 장소가 없어요</h3>
+              <p id="received-detail">소리 신호를 받으면 이곳에 표시됩니다.</p>
+              <a class="button secondary map-button" id="map-link" target="_blank" rel="noopener noreferrer" hidden>
+                <span class="icon icon-pin" aria-hidden="true"></span> 카카오맵에서 보기
+              </a>
+            </div>
+            <div class="demo-row">
+              <span>마이크 없이 확인하기</span>
+              <button class="text-button" id="demo-button" type="button"><span class="icon icon-play" aria-hidden="true"></span> 덕진공원 데모</button>
+            </div>
+          </section>
+        </div>
+
+        <aside class="display-rules" aria-labelledby="rules-heading">
+          <span class="rule-mark"><i class="icon icon-filter" aria-hidden="true"></i></span>
+          <div>
+            <h2 id="rules-heading">장소 표시 기준</h2>
+            <p>한 번에 한 장소만 표시합니다. 새 장소는 최소 15초, 같은 장소는 최소 45초 간격으로 표시합니다.</p>
+          </div>
+        </aside>
+      </section>
+
+      <section id="studio-panel" role="tabpanel" aria-labelledby="studio-tab" hidden>
+        <div class="panel-grid studio-grid">
+          <section class="surface studio-surface" aria-labelledby="speech-heading">
+            <div class="surface-bar">
+              <h2 class="section-label" id="speech-heading">방송 대사로 보내기</h2>
+              <span id="speech-status" class="status" role="status"><i></i><span>음성 인식 꺼짐</span></span>
+            </div>
+            <div class="studio-body">
+              <p>“오늘은 덕진공원에서 만나요”처럼 장소 하나를 말하면, 문장이 끝난 뒤 소리 신호를 재생합니다.</p>
+              <button class="button primary" id="speech-button" type="button">
+                <span class="icon icon-mic" aria-hidden="true"></span><span id="speech-button-text">자동 음성 인식 시작</span>
+              </button>
+              <p class="micro-note speech-note">브라우저가 음성 인식 서비스로 마이크 오디오를 전송할 수 있습니다.</p>
+              <form class="transcript-form" id="transcript-form">
+                <label for="transcript">또는 방송 대사 입력</label>
+                <textarea id="transcript" name="transcript" maxlength="600" rows="2" required placeholder="오늘은 덕진공원에 가볼까요?"></textarea>
+                <button class="button secondary" type="submit">대사에서 찾아 보내기</button>
+              </form>
+              <p class="feedback" id="studio-feedback" role="status" hidden></p>
+              <p class="last-transcript" id="last-transcript" hidden></p>
+            </div>
+          </section>
+          <section class="surface studio-surface" aria-labelledby="cue-heading">
+            <div class="surface-bar">
+              <h2 class="section-label" id="cue-heading">장소 신호 만들기</h2>
+            </div>
+            <div class="studio-body">
+              <label for="place-select">등록 장소</label>
+              <select id="place-select"></select>
+              <div class="cue-buttons">
+                <button class="button primary" id="play-cue" type="button"><span class="icon icon-play" aria-hidden="true"></span> 지금 보내기</button>
+                <button class="button secondary" id="download-cue" type="button">WAV 다운로드</button>
+              </div>
+              <p>실시간 방송에는 이 기기의 오디오 출력을 믹서에 연결하세요. 녹음 방송에는 WAV를 별도 트랙으로 넣을 수 있습니다.</p>
+              <p class="feedback" id="cue-feedback" role="status" hidden></p>
+            </div>
+          </section>
+        </div>
+        <aside class="display-rules">
+          <span class="rule-mark"><i class="icon icon-filter" aria-hidden="true"></i></span>
+          <div>
+            <h2>방송 송출 전 확인</h2>
+            <p>FM과 일부 스트리밍 설정은 고주파 신호를 제거합니다. 실제 송출 음원을 청취 기기에서 확인하세요.</p>
+          </div>
+        </aside>
+      </section>
+
+      <footer class="site-footer"><span>소리지도</span><span>방송 연동 테스트</span></footer>
+    </main>
+
+    <dialog id="guide" aria-labelledby="guide-heading">
+      <div class="guide-header">
+        <h2 id="guide-heading">사용 안내</h2>
+        <form method="dialog"><button class="close-button" type="submit" aria-label="닫기">×</button></form>
+      </div>
+      <div class="guide-body">
+        <h3>방송 보내기</h3>
+        <p>방송 스튜디오에서 음성 인식을 시작한 뒤 “오늘은 덕진공원에 가볼까요?”라고 말하세요. 장소를 직접 선택해서 보내거나 WAV를 저장할 수도 있습니다.</p>
+        <h3>휴대폰에서 받기</h3>
+        <p>HTTPS로 페이지를 열고 수신을 시작해 마이크 권한을 허용하세요. 페이지를 화면에 띄운 상태에서 방송 소리를 들려주면 받은 장소가 자동으로 바뀝니다.</p>
+        <h3>송출 환경</h3>
+        <p>고주파가 보존되는 송출 및 재생 장치가 필요합니다. 일부 청취자는 신호를 들을 수 있으므로 낮은 볼륨에서 테스트하세요.</p>
+      </div>
+    </dialog>
+  </body>
+</html>
